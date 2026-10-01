@@ -55,3 +55,12 @@ export function tampilkanToast(pesan) {
   clearTimeout(pengaturWaktuToast);
   pengaturWaktuToast = setTimeout(() => toast.classList.remove('tampil'), 2600);
 }
+
+// Menunda eksekusi fungsi sampai jeda waktu tertentu setelah panggilan terakhir
+export function debounce(fungsi, tundaMs = 200) {
+  let pengaturWaktu;
+  return (...argumen) => {
+    clearTimeout(pengaturWaktu);
+    pengaturWaktu = setTimeout(() => fungsi(...argumen), tundaMs);
+  };
+}
