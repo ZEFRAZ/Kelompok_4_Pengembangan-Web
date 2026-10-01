@@ -1,13 +1,12 @@
 # Laporan audit performa dan interaksi TokoKilat
 
-Tim: Kelompok 4Anggota & Pembagian Tugas:
-
+Tim: Kelompok 4  
+Anggota & Pembagian Tugas:
 - Adi Rafi: Tiket 2 (TK-1044) & Tiket 4 (TK-1057)
 - Faujan: Tiket 6 (TK-1070) & Tiket 7 (TK-1078)
 - Rangga: Tiket 5 (TK-1063) & Tiket 3 (TK-1052)
-- Rizki Nurmahmudi: Tiket 8 (TK-1081) & Tiket 1 (TK-1041)
-
-Tanggal: Oktober 2026
+- Rizki Nurmahmudi: Tiket 8 (TK-1081) & Tiket 1 (TK-1041)  
+Tanggal: Oktober 2026  
 Panjang maksimal setara 6 halaman (tidak termasuk lampiran gambar).
 
 ## 1. Ringkasan eksekutif (maks. 150 kata)
