@@ -26,9 +26,10 @@ dan penyimpangan apa pun dari protokol di TUGAS.md bagian 7.
 | S0       | Jumlah permintaan gambar dalam 10 dtk pertama | ~3.000           | 12               | sebanding dengan yang terlihat | Ya        |
 | S1       | INP                                           | 688 ms           | ~45 ms           | <= 200 ms                      | Ya        |
 | S1       | Long task terlama                             | 829 ms           | 0 ms             | <= 100 ms                      | Ya        |
-| S2       | INP                                           |                  |                  | <= 200 ms                      |           |
+| S2       | INP                                           | 104 ms           |                  | <= 200 ms                      |           |
 | S3       | Jumlah pesanan dari 3 klik                    |                  |                  | 1                              |           |
-| S4       | INP / progres tergambar bertahap?             |                  |                  |                                |           |
+| S4       | INP / progres tergambar bertahap?             | 1.784 ms / Tidak (stuck 0% lalu loncat selesai) |                  | <= 200 ms / Ya                 |           |
+| S4       | Long task terlama                             | 1.774 ms         |                  | <= 100 ms                      |           |
 | S5       | Frame > 50 ms per 10 dtk                      |                  |                  | <= 2                           |           |
 | S6       | Frame > 50 ms per 10 dtk                      |                  |                  | <= 2                           |           |
 
@@ -64,6 +65,48 @@ dan penyimpangan apa pun dari protokol di TUGAS.md bagian 7.
   3. Menjadwalkan pengiriman analitik vendor melalui `requestIdleCallback` (atau `setTimeout`) agar hashing analitik berjalan saat main thread sedang menganggur.
 - **Trade-off:** Hasil filter produk diperbarui 200 ms setelah jeda ketik pengguna, namun respons visual karakter yang diketik pengguna menjadi instan (0 ms latency).
 - **Hasil:** INP turun dari **> 500 ms menjadi ~45 ms**, tidak ada Long Task selama pengetikan (0 ms task > 100 ms), dan input pengetikan terasa sangat mulus.
+
+### T-03: Tombol "+ Keranjang" Tidak Responsif karena Operasi Sinkron Berat Sebelum Feedback Visual (TK-1044)
+
+- **Tiket terkait:** TK-1044 (Pak Anton)
+- **Gejala bagi pengguna:** Menekan tombol "+ Keranjang" tidak memberikan reaksi visual apa pun (tombol tidak berubah, lencana keranjang tidak bertambah). Pengguna mengira tombol rusak dan mengklik berulang kali, yang mengakibatkan produk masuk keranjang sebanyak jumlah klik (3 kali klik = 3 item).
+- **Bukti:** Pada Skenario S2, alat ukur TokoKilat mencatat **INP 104 ms** (2 interaksi), **23 Long Task** (terlama **1.122 ms**), total **blokir 12.124 ms**, dan **254 Frame >50 ms** (terburuk 271.084 ms). Panel Performance DevTools menunjukkan INP 100 ms. Pada flame chart, setelah event klik, terdapat satu blok task panjang berisi call stack: `tambahKeKeranjang` → `bacaRiwayat` (JSON.parse 9.000 entri) → `Lacak.kirim` (JSON.stringify + hashing 2 juta iterasi) → `simpanRiwayat` (JSON.stringify + localStorage.setItem). Seluruh operasi ini selesai sebelum kode mencapai baris pembaruan tampilan (`perbaruiLencana`, `tombol.textContent`).
+- **Akar masalah dan mekanismenya:** Di `public/js/keranjang.js` fungsi `tambahKeKeranjang` (baris 68–93), **feedback visual ditempatkan di akhir fungsi**, setelah tiga operasi berat yang sinkron:
+  1. `bacaRiwayat()`: mem-parse ~9.000 entri riwayat dari localStorage (JSON.parse pada string besar).
+  2. `window.Lacak.kirim('add_to_cart', { produk, keranjang, riwayat, ... })`: mengirim payload berisi **seluruh array riwayat 9.000 entri** ke SDK vendor. SDK melakukan `JSON.stringify` pada payload besar, lalu loop hashing `t()` sebanyak R=12 × panjang string, dan loop sidik perangkat `f()` sebanyak F=2.000.000 iterasi — semua sinkron di main thread.
+  3. `simpanRiwayat(riwayat)`: menulis kembali 9.000+ entri ke localStorage (JSON.stringify lagi).
+  
+  Karena semua operasi berada dalam satu macrotask, browser tidak mendapat rendering opportunity. DOM sudah diubah (teks tombol, lencana) tapi **paint belum terjadi**. Setiap klik pengguna mengantri sebagai macrotask baru, masing-masing menambahkan 1 ke keranjang.
+- **Kualitas yang terdampak (ISO/IEC 25010:2023):**
+  - *Performance Efficiency (Time Behaviour):* Respons interaksi tertunda ratusan milidetik hingga lebih dari satu detik.
+  - *Interaction Capability (Operability):* Tombol tidak memberikan indikasi bahwa aksi telah diterima; pengguna kesulitan mengendalikan keranjang.
+  - *Interaction Capability (User Error Protection):* Tidak ada pencegahan klik ganda; pengguna dapat secara tidak sengaja menambahkan produk berkali-kali.
+  - *Interaction Capability (Self-descriptiveness):* Antarmuka gagal mengomunikasikan status (sedang memproses vs. gagal vs. berhasil).
+- **Perbaikan:** (akan diisi setelah kode diperbaiki)
+- **Trade-off:** (akan diisi setelah kode diperbaiki)
+- **Hasil:** (akan diisi setelah pengukuran ulang)
+
+### T-04: Voucher KILAT1212 Membekukan Seluruh Halaman karena Async Palsu pada Perhitungan Cicilan (TK-1057)
+
+- **Tiket terkait:** TK-1057 (Mas Dimas)
+- **Gejala bagi pengguna:** Setelah memasukkan kode voucher KILAT1212 dan menekan "Pakai voucher", layar langsung beku. Progress bar menampilkan "Menghitung harga promo… 0%" tanpa bergerak, lalu tiba-tiba langsung selesai. Selama proses berlangsung, pengguna tidak bisa scroll maupun mengetik — mengira aplikasi crash.
+- **Bukti:** Pada Skenario S4, alat ukur TokoKilat mencatat **INP 1.784 ms** (merah, 16 interaksi), **70 Long Task** (terlama **1.774 ms**), total **blokir 4.120 ms**, dan **91 Frame >50 ms** (terburuk 10.816 ms). Panel Performance DevTools menunjukkan INP 1.784 ms. Pada flame chart, terlihat satu blok task raksasa tanpa jeda rendering di tengahnya. Track Frames menunjukkan deretan frame merah (dropped). Saat pengguna mengetik "teh" di kolom pencarian, huruf baru muncul setelah seluruh proses voucher selesai — membuktikan main thread 100% diblokir.
+- **Akar masalah dan mekanismenya:** Di `public/js/harga-promo.js`, fungsi `terapkanVoucher` (baris 42–71) melakukan loop `for...of` pada seluruh produk dan memanggil `await hitungHargaPromo(produk, aturan)` di setiap iterasi. Komentar kode menyatakan *"await supaya browser sempat menggambar progress bar"*, namun ini adalah **kesalahan konsep tentang microtask vs macrotask**:
+  - `hitungHargaPromo` bersifat `async` tetapi **tidak mengandung operasi asinkron sejati** (hanya komputasi murni `simulasiCicilan`). Promise-nya resolve sinkron.
+  - `await` pada Promise yang sudah resolved menjadwalkan kelanjutan sebagai **microtask**, bukan macrotask. Microtask diproses **tanpa jeda rendering** — browser menghabiskan seluruh microtask queue sebelum melakukan rendering opportunity.
+  - Di dalam `hitungHargaPromo`, terdapat loop `for (let i = 0; i < 40; i++) simulasiCicilan(hargaAkhir + i)` ("cek kestabilan pembulatan") yang **hasilnya tidak digunakan** namun menambah beban komputasi 40× lipat.
+  - Total: ~1.200 produk × 41 simulasi cicilan = ~49.200 eksekusi `simulasiCicilan`, semua berjalan tanpa yield.
+  
+  Perubahan DOM (progress bar width dan teks) menumpuk sebagai pending style changes yang baru di-paint setelah seluruh microtask selesai, sehingga pengguna melihat lompatan dari 0% langsung ke 100%.
+- **Kualitas yang terdampak (ISO/IEC 25010:2023):**
+  - *Performance Efficiency (Time Behaviour):* Proses voucher memblokir UI selama detik-detik penuh (INP 1.784 ms, long task hingga 1.774 ms).
+  - *Performance Efficiency (Resource Utilization):* Main thread CPU 100% terpakai untuk komputasi yang seharusnya bisa di-chunk.
+  - *Interaction Capability (Operability):* Pengguna tidak bisa scroll, mengetik, atau berinteraksi sama sekali selama proses berlangsung.
+  - *Interaction Capability (Self-descriptiveness):* Progress bar seharusnya mengindikasikan kemajuan, namun gagal karena tidak pernah di-render secara bertahap.
+  - *Interaction Capability (User Engagement):* Pengguna mengira aplikasi crash dan ingin meninggalkan halaman.
+- **Perbaikan:** (akan diisi setelah kode diperbaiki)
+- **Trade-off:** (akan diisi setelah kode diperbaiki)
+- **Hasil:** (akan diisi setelah pengukuran ulang)
 
 ## 5. Dugaan yang ternyata keliru
 
