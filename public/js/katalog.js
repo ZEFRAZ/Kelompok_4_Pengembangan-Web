@@ -16,7 +16,7 @@ export async function muatProduk() {
   return keadaan.semuaProduk;
 }
 
-function buatKartu(produk) {
+function buatKartu(produk, indeks = 0) {
   const kartu = el('article', 'kartu');
   kartu.dataset.id = produk.id;
 
@@ -27,6 +27,15 @@ function buatKartu(produk) {
   const gambar = document.createElement('img');
   gambar.src = produk.gambar;
   gambar.alt = produk.nama;
+  gambar.width = 480;
+  gambar.height = 480;
+  gambar.decoding = 'async';
+  if (indeks < 6) {
+    gambar.loading = 'eager';
+    gambar.setAttribute('fetchpriority', 'high');
+  } else {
+    gambar.loading = 'lazy';
+  }
   media.append(gambar);
 
   const badan = el('div', 'kartu-badan');
@@ -88,8 +97,8 @@ export function renderProduk(daftar) {
     kisi.append(kosong);
   }
 
-  for (const produk of daftar) {
-    kisi.append(buatKartu(produk));
+  for (let i = 0; i < daftar.length; i++) {
+    kisi.append(buatKartu(daftar[i], i));
   }
 
   samakanTinggiJudul();
