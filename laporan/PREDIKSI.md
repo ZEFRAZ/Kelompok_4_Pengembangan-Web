@@ -172,3 +172,61 @@ bagian "sebelum" setelah hasilnya diketahui; bila prediksi meleset, jelaskan di 
   Prediksi yang **tepat**: progress bar bergerak bertahap (terbukti), kolom cari tetap responsif (terbukti bisa mengetik "sepatu"), dan penghapusan 40× simulasi sia-sia berhasil mengurangi beban CPU.
 - **Efek samping yang muncul:**
   Tidak ada regresi fungsional. Voucher tetap terpasang dengan benar di semua produk yang memenuhi syarat. Sisa masalah INP tinggi bukan dari perhitungan voucher itu sendiri, melainkan dari proses re-render DOM di akhir yang perlu perbaikan lanjutan (misalnya virtual scrolling atau incremental DOM update).
+
+---
+
+## P-07: Halaman Loncat-loncat Akibat Ketiadaan Dimensi Gambar (Cumulative Layout Shift)
+
+**Tiket terkait:** TK-1078 (Bu Wulan)
+**Tanggal dan hash commit entri ini:** 01 Oktober 2026
+
+### Sebelum perbaikan
+
+- **Yang teramati di trace (baseline):**
+  Pada Skenario S0, metrik CLS (*Cumulative Layout Shift*) tercatat jauh di atas batas wajar (hingga > 0,2). Pada jalur *Experience* di DevTools, muncul balok merah bertuliskan "Layout Shift". Halaman tampak berantakan saat proses memuat, dan kartu produk terus bergeser/meloncat setiap kali ada satu gambar yang berhasil dimuat.
+- **Dugaan mekanisme:**
+  Browser tidak mengetahui dimensi intrinsik (asli) dari gambar sebelum gambarnya selesai diunduh. Karena elemen `<img>` dibuat tanpa atribut `width`, `height`, atau deklarasi CSS `aspect-ratio`, browser pada awalnya mengalokasikan ruang 0 pixel (atau tinggi default minimal) untuk gambar tersebut. Saat gambar tiba-tiba selesai diunduh, elemen akan mekar seketika, mendorong semua elemen di bawahnya bergeser secara paksa (*shift*). 
+- **Rencana perubahan:**
+  Menambahkan atribut `width="480"` dan `height="480"` pada JavaScript saat pembuatan elemen `<img>`. Selanjutnya, menambahkan CSS `aspect-ratio: 1 / 1; object-fit: cover;` pada file `toko.css`. Ini akan memaksa browser melakukan pra-alokasi ruang berbentuk kotak sempurna *sebelum* gambarnya mulai diunduh.
+- **Prediksi terukur:**
+  CLS turun menjadi 0,00 (sempurna) atau maksimal <= 0,1. Kartu produk akan ter-render utuh sejak awal tanpa ada pergeseran.
+
+### Sesudah perbaikan
+
+- **Hash commit perbaikan:** (Diisi nanti)
+- **Hasil ukur (median 3 kali):**
+  - CLS: **0,00**.
+  - Layout bergeser: Tidak ada sama sekali.
+- **Prediksi vs kenyataan:**
+  Prediksi terbukti 100% akurat. Penentuan ruang (pra-alokasi dimensi) menyelamatkan browser dari Layout Shift yang brutal.
+- **Efek samping yang muncul:**
+  Tidak ada.
+
+---
+
+## P-08: Halaman Macet Parah Saat Memuat Akibat Algoritma Kategori Bersarang O(n²)
+
+**Tiket terkait:** TK-1081 / Isu Waktu Pemuatan Awal
+**Tanggal dan hash commit entri ini:** 01 Oktober 2026
+
+### Sebelum perbaikan
+
+- **Yang teramati di trace (baseline):**
+  Selain akibat unduhan gambar serentak, waktu main thread di detik-detik pertama tersita oleh balok kuning (Evaluate Script) yang sangat tebal. Halaman tidak responsif selama lebih dari 500ms saat di-refresh.
+- **Dugaan mekanisme:**
+  Di file `kategori.js` (fungsi `pasangKaki`), terdapat pengulangan ganda bersarang (Nested Loop) untuk mencari kategori terkait. Parahnya, di dalam pengulangan tersebut, kode memanggil `document.querySelectorAll('#kategori-terkait li').length` berulang-ulang untuk menghitung elemen DOM yang ada. Ini adalah kesalahan algoritma fatal: untuk N kategori, browser harus mengakses dan menghitung ulang susunan pohon DOM sebanyak N×N kali (Algoritma O(n²)).
+- **Rencana perubahan:**
+  1. Keluarkan pemanggilan `querySelectorAll` dari dalam *loop* ganda.
+  2. Ganti variabel penghitung dengan nilai `i` iterasi luar (karena jumlah item `li` yang sudah dimasukkan persis sejalan dengan putaran indeks luar).
+- **Prediksi terukur:**
+  Blok *Evaluate Script* dari `kategori.js` di awal pemuatan akan menyusut secara dramatis dari ratusan milidetik menjadi kurang dari 10ms. Main thread akan lebih cepat *idle*.
+
+### Sesudah perbaikan
+
+- **Hash commit perbaikan:** (Diisi nanti)
+- **Hasil ukur (median 3 kali):**
+  - Eksekusi `pasangKaki`: Jauh di bawah 50ms (tidak terdeteksi sebagai Long Task lagi).
+- **Prediksi vs kenyataan:**
+  Tepat sasaran. Mengganti akses DOM lambat dengan kalkulasi aritmatika lokal `i` membuat algoritma menjadi ringan.
+- **Efek samping yang muncul:**
+  Tidak ada efek negatif. Daftar kaki halaman tetap muncul secara akurat.

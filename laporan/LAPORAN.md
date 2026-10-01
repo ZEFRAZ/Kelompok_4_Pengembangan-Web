@@ -186,15 +186,37 @@ dan penyimpangan apa pun dari protokol di TUGAS.md bagian 7.
 - **Trade-off:** Total durasi proses voucher sedikit bertambah (~beberapa puluh ms) karena overhead penjadwalan macrotask per chunk. Namun UX jauh lebih baik: pengguna melihat progress bar bergerak dan bisa tetap berinteraksi.
 - **Hasil:** Long task turun dari **70 menjadi 4**, terlama turun dari **1.774 ms menjadi 769 ms**, total blokir turun dari **4.120 ms menjadi 1.217 ms** (~70% perbaikan). Progress bar bergerak bertahap dan kolom pencarian tetap responsif. Namun **INP masih 1.344 ms** karena bottleneck berpindah ke `renderProduk` (rebuild DOM seluruh kartu) di akhir proses — perbaikan lanjutan diperlukan (lihat bagian 6).
 
+### T-05: Scroll Halaman Patah-patah akibat Pengukuran Layout Sinkron Berulang (TK-1063)
+
+- **Tiket terkait:** TK-1063 (Mbak Nisa)
+- **Gejala bagi pengguna:** Saat melakukan *scroll* layar ke bawah, layar terasa tersendat/patah-patah (FPS sangat rendah), dan HP terasa berat.
+- **Akar masalah dan mekanismenya:** Di `public/js/gulir.js`, event `scroll` diikat langsung memanggil fungsi yang melakukan iterasi pada **semua 1.200 elemen kartu** dan memanggil `getBoundingClientRect()` pada setiap iterasi. Pemanggilan ini memaksa browser melakukan *Forced Synchronous Layout* berulang-ulang hingga 120 kali per detik selama pengguna menggulir layar. Akibatnya, Main Thread kelebihan beban dan *frame rate* drop.
+- **Perbaikan:** Menghapus event listener `scroll` berat tersebut dan menggantinya dengan teknologi **IntersectionObserver** yang didelegasikan pada proses asinkron browser. Observer ini secara otomatis mendeteksi kartu yang masuk ke viewport tanpa perlu memanggil `getBoundingClientRect` manual. Kami juga menambahkan `{ passive: true }` pada *event listener* `touchstart` dan `wheel` agar *Compositor Thread* tidak perlu menunggu JavaScript selesai.
+- **Hasil:** *Scrolling* menjadi mulus. Jumlah frame lambat (>50ms) turun drastis, interaksi bebas dari blokir panjang.
+
+### T-06: HP Cepat Panas dan Baterai Boros Meski Tidak Ada Interaksi (TK-1070)
+
+- **Tiket terkait:** TK-1070 (Customer)
+- **Gejala bagi pengguna:** Halaman toko diam terbuka di HP, namun HP menjadi panas dan baterai cepat terkuras.
+- **Akar masalah dan mekanismenya:** Di `public/js/promo.js`, animasi hitung mundur dan teks berjalan ("marquee") dijalankan menggunakan `setInterval(..., 10)`. Ini memaksa CPU melakukan *Layout* dan *Paint* ulang 100 kali dalam sedetik tanpa henti, bahkan saat animasi tidak diperlukan secara visual oleh kecepatan layar.
+- **Perbaikan:** Memindahkan logika `setInterval` ke **requestAnimationFrame** agar eksekusinya sinkron dengan *refresh rate* layar (~60 FPS). Selain itu, khusus untuk teks berjalan, alih-alih mengubah `left` (yang memicu perubahan Layout), kami menggantinya menggunakan CSS `transform: translateX(...)` yang ditangani sepenuhnya oleh GPU (*Compositor Thread*).
+- **Hasil:** Saat layar diam (Skenario S6), penggunaan CPU utama (Main Thread) nyaris 0%. Animasi tetap mulus namun bebas beban CPU.
+
 ## 5. Dugaan yang ternyata keliru
 
-Dugaan dari catatan serah terima, dari tiket, atau dari tim Anda sendiri yang terbantah oleh
-pengukuran. Sertakan angkanya. Bagian ini sama pentingnya dengan bagian temuan.
+1. **"Gunakan async/await agar UI tidak freeze."** 
+   *Bantahan:* Di kasus fungsi voucher (Tiket 4), penggunaan `await` pada fungsi yang murni kalkulasi matematika (sinkron) ternyata **tidak melepaskan (yield)** eksekusi ke Main Thread. *Promise* langsung diproses sebagai *microtask*, sehingga browser tetap menunda rendering (frame merah) hingga keseluruhan loop 49.000 iterasi selesai. Solusi aslinya harus memakai `setTimeout(..., 0)` untuk menciptakan *macrotask* pembagi.
+2. **"Lazy loading gambar otomatis menyelesaikan semua masalah muat awal."**
+   *Bantahan:* Meskipun `loading="lazy"` menghentikan ribuan permintaan gambar sekaligus, eksekusi kode *looping* O(n²) di `kategori.js` tetap membebani waktu eksekusi skrip hingga >500ms di Skenario 0, yang baru teratasi setelah kode O(n²) tersebut dikeluarkan dari *loop* bersarangnya.
 
 ## 6. Yang belum beres dan rekomendasi
 
-Masalah yang tersisa, risiko, dan usulan untuk tim lain (backend, vendor SDK, desain).
+- **SDK Vendor (Lacak.min.js):** Kode pelacakan analitik dari vendor sangat usang dan melakukan iterasi hashing hingga 2 juta kali di *Main Thread* untuk mencari *fingerprint*. Sebaiknya tim manajemen menegur vendor analitik ini untuk menyediakan fitur asinkron sejati (misal via *Web Worker*). Saat ini kami mengakalinya dengan menjadwalkan ke `setTimeout`.
+- **Backend Pencarian:** Semua pemfilteran 3.000 produk saat ini dilakukan secara statis di sisi klien (*frontend*). Seiring bertambahnya data produk, *frontend* akan kembali melambat. Direkomendasikan agar sistem pencarian dipindah ke sisi *Server/Backend* melalui API.
 
 ## 7. Pernyataan penggunaan AI dan pembagian kerja
 
-Alat AI yang dipakai dan untuk apa. Kontribusi tiap anggota.
+- **Alat AI:** Menggunakan Antigravity AI IDE (Gemini) sebagai mitra diskusi (*pair-programming*), mendiagnosis alat ukur DevTools, serta meninjau (*review*) sintaks kode pengganti yang optimal.
+- **Rangga:** Bertanggung jawab atas optimasi *IntersectionObserver* (Tiket 5) dan logika pencegahan *double-submit* di `keranjang.js` (Tiket 3).
+- **Adi Rafi:** Memindahkan penyimpanan lokal *Heavy Task* ke latar belakang dengan *setTimeout* (Tiket 2) dan melakukan *chunking macrotask* di proses voucher (Tiket 4).
+- **Faujan & Rizki:** (Masing-masing memperbaiki algoritma *requestAnimationFrame* pada UI Promo dan memperbaiki sistem pemuatan asinkron awal).
