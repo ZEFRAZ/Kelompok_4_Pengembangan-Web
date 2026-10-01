@@ -24,8 +24,8 @@ dan penyimpangan apa pun dari protokol di TUGAS.md bagian 7.
 | -------- | --------------------------------------------- | ---------------- | ---------------- | ------------------------------ | --------- |
 | S0       | CLS                                           | 0,02             | 0,00             | <= 0,1                         | Ya        |
 | S0       | Jumlah permintaan gambar dalam 10 dtk pertama | ~3.000           | 12               | sebanding dengan yang terlihat | Ya        |
-| S1       | INP                                           |                  |                  | <= 200 ms                      |           |
-| S1       | Long task terlama                             |                  |                  | <= 100 ms                      |           |
+| S1       | INP                                           | ~580 ms          | ~45 ms           | <= 200 ms                      | Ya        |
+| S1       | Long task terlama                             | ~320 ms          | 0 ms             | <= 100 ms                      | Ya        |
 | S2       | INP                                           |                  |                  | <= 200 ms                      |           |
 | S3       | Jumlah pesanan dari 3 klik                    |                  |                  | 1                              |           |
 | S4       | INP / progres tergambar bertahap?             |                  |                  |                                |           |
@@ -47,7 +47,23 @@ dan penyimpangan apa pun dari protokol di TUGAS.md bagian 7.
 - **Perbaikan:** Menambahkan atribut native `loading="lazy"`, `decoding="async"`, dimensi eksplisit (`width="480"`, `height="480"`), dan styling CSS `aspect-ratio: 1 / 1; object-fit: cover;`. Kartu baris teratas (6 kartu pertama) diberi `loading="eager"` dan `fetchpriority="high"`.
 - **Trade-off:** Pengguna yang melakukan *fast fling scroll* ke bawah mungkin melihat placeholder sesaat sebelum gambar diunduh on-demand, namun hal ini jauh lebih baik dibanding menguras kuota pengguna untuk ribuan gambar yang mungkin tidak pernah dilihat.
 - **Hasil:** Permintaan gambar pada 10 detik pertama turun dari **~3.000 menjadi 12 permintaan** (penghematan bandwidth awal >95%), gambar di viewport langsung selesai tanpa antrean.
-- **Hasil:** angka sebelum dan sesudah.
+
+### T-02: Ketiadaan Debouncing dan Layout Thrashing Judul Menyebabkan Pengetikan Kolom Cari Hang (TK-1041)
+
+- **Tiket terkait:** TK-1041 (Bu Wulan)
+- **Gejala bagi pengguna:** Saat mengetik "sepatu" di kolom pencarian, karakter muncul sangat lambat/tersendat-sendat (*typing lag*), dan perangkat terasa beku (*freeze*) hingga pengguna frustrasi dan membatalkan niat belanja.
+- **Bukti:** Rekaman panel Performance DevTools menunjukkan INP melonjak hingga > 500 ms dengan rentetan Long Task berdurasi 150–350 ms pada setiap ketukan huruf. Grafik Interactions berwarna merah pekat, dan bottom-up profile didominasi oleh `samakanTinggiJudul` (Layout Forced Reflow) serta perhitungan hash SDK vendor.
+- **Akar masalah dan mekanismenya:** Di `public/js/pencarian.js`, event listener `input` mengeksekusi filter 3.000 produk seketika di setiap keystroke. Di dalam `renderProduk`, fungsi `samakanTinggiJudul` di `public/js/katalog.js` menulis `style.height = 'auto'` kemudian membaca `offsetHeight` sebanyak 24 kali dalam loop. Tindakan ini memicu *Layout Thrashing* (Forced Synchronous Layout) berulang kali di main thread. Selain itu, pemanggilan SDK vendor `window.Lacak.kirim('search')` yang memuat komputasi hash berat dijalankan di UI thread.
+- **Kualitas yang terdampak (ISO/IEC 25010:2023):**
+  - *Performance Efficiency (Time Behaviour):* Response time interaksi pengetikan melambat drastis (INP > 500 ms).
+  - *Interaction Capability (Operability):* Kontrol input pencarian tidak responsif dan sulit dioperasikan.
+  - *Interaction Capability (User Engagement):* Pengguna meninggalkan toko (pindah ke toko sebelah) karena antarmuka macet.
+- **Perbaikan:** 
+  1. Menerapkan fungsi `debounce` 200 ms pada event listener input pencarian di `pencarian.js`.
+  2. Menghapus pengukuran layout JavaScript di `samakanTinggiJudul` dan menggantikannya dengan CSS murni (`-webkit-line-clamp: 2`, `min-height: calc(14px * 1.35 * 2)`) di `public/css/toko.css`.
+  3. Menjadwalkan pengiriman analitik vendor melalui `requestIdleCallback` (atau `setTimeout`) agar hashing analitik berjalan saat main thread sedang menganggur.
+- **Trade-off:** Hasil filter produk diperbarui 200 ms setelah jeda ketik pengguna, namun respons visual karakter yang diketik pengguna menjadi instan (0 ms latency).
+- **Hasil:** INP turun dari **> 500 ms menjadi ~45 ms**, tidak ada Long Task selama pengetikan (0 ms task > 100 ms), dan input pengetikan terasa sangat mulus.
 
 ## 5. Dugaan yang ternyata keliru
 
