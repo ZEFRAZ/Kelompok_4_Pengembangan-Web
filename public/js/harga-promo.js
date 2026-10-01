@@ -27,16 +27,23 @@ function simulasiCicilan(harga) {
   return terbaik;
 }
 
-// Dibuat async supaya perhitungan tidak memblokir halaman.
-async function hitungHargaPromo(produk, aturan) {
+// Menghitung harga promo untuk satu produk (sinkron murni, tidak perlu async palsu).
+function hitungHargaPromo(produk, aturan) {
   const dasar = hargaSetelahDiskon(produk);
   if (dasar < aturan.minBelanja) return null;
   let potongan = Math.min(Math.round((dasar * aturan.persen) / 100), aturan.maksPotongan);
   if (produk.flashSale) potongan = Math.round(potongan / 2); // flash sale hanya dapat setengah
   let hargaAkhir = Math.max(dasar - potongan, 100);
-  for (let i = 0; i < 40; i++) simulasiCicilan(hargaAkhir + i); // cek kestabilan pembulatan
+  // Loop 40x "cek kestabilan pembulatan" dihapus — hasilnya tidak pernah digunakan,
+  // hanya membuang ~40x CPU per produk tanpa manfaat.
   const cicilan = simulasiCicilan(hargaAkhir);
   return { hargaAkhir, cicilan };
+}
+
+// Fungsi bantu: yield ke main thread agar browser bisa merender dan memproses input.
+// setTimeout(0) menjadwalkan kelanjutan sebagai macrotask, bukan microtask.
+function yieldKeMainThread() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 async function terapkanVoucher(kode) {
@@ -56,14 +63,23 @@ async function terapkanVoucher(kode) {
   let selesai = 0;
   keadaan.hargaVoucher.clear();
 
-  for (const produk of keadaan.semuaProduk) {
-    // await di setiap produk supaya browser sempat menggambar progress bar
-    const hasil = await hitungHargaPromo(produk, aturan);
+  const UKURAN_CHUNK = 50; // proses 50 produk per chunk, lalu yield
+
+  for (let i = 0; i < total; i++) {
+    const produk = keadaan.semuaProduk[i];
+    const hasil = hitungHargaPromo(produk, aturan);
     if (hasil) keadaan.hargaVoucher.set(produk.id, hasil.hargaAkhir);
     selesai++;
-    const persen = Math.round((selesai / total) * 100);
-    isi.style.width = persen + '%';
-    teks.textContent = 'Menghitung harga promo… ' + persen + '% (' + selesai + ' dari ' + total + ' produk)';
+
+    // Setiap UKURAN_CHUNK produk, yield ke main thread agar browser bisa:
+    // 1. Merender ulang progress bar (paint)
+    // 2. Memproses event input pengguna (scroll, ketik)
+    if (selesai % UKURAN_CHUNK === 0 || selesai === total) {
+      const persen = Math.round((selesai / total) * 100);
+      isi.style.width = persen + '%';
+      teks.textContent = 'Menghitung harga promo… ' + persen + '% (' + selesai + ' dari ' + total + ' produk)';
+      if (selesai < total) await yieldKeMainThread();
+    }
   }
 
   perbaruiHargaVoucherDiKartu();
