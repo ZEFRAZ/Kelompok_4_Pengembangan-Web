@@ -26,10 +26,15 @@ dan penyimpangan apa pun dari protokol di TUGAS.md bagian 7.
 | S0       | Jumlah permintaan gambar dalam 10 dtk pertama | ~3.000           | 12               | sebanding dengan yang terlihat | Ya        |
 | S1       | INP                                           | 688 ms           | ~45 ms           | <= 200 ms                      | Ya        |
 | S1       | Long task terlama                             | 829 ms           | 0 ms             | <= 100 ms                      | Ya        |
-| S2       | INP                                           | 104 ms           |                  | <= 200 ms                      |           |
+| S2       | INP                                           | 104 ms           | 52 ms            | <= 200 ms                      | Ya        |
+| S2       | Long task terlama                             | 1.122 ms         | 166 ms           | <= 100 ms                      | Sebagian  |
+| S2       | Feedback visual instan?                       | Tidak            | Ya               | Ya                             | Ya        |
 | S3       | Jumlah pesanan dari 3 klik                    |                  |                  | 1                              |           |
-| S4       | INP / progres tergambar bertahap?             | 1.784 ms / Tidak (stuck 0% lalu loncat selesai) |                  | <= 200 ms / Ya                 |           |
-| S4       | Long task terlama                             | 1.774 ms         |                  | <= 100 ms                      |           |
+| S4       | INP / progres tergambar bertahap?             | 1.784 ms / Tidak (stuck 0% lalu loncat selesai) | 1.344 ms / Ya (bertahap) | <= 200 ms / Ya                 | Sebagian  |
+| S4       | Long task terlama                             | 1.774 ms         | 769 ms           | <= 100 ms                      | Sebagian  |
+| S4       | Long task (jumlah)                            | 70               | 4                | -                              | -         |
+| S4       | Total blokir                                  | 4.120 ms         | 1.217 ms         | -                              | -         |
+| S4       | Input responsif saat proses?                  | Tidak            | Ya               | Ya                             | Ya        |
 | S5       | Frame > 50 ms per 10 dtk                      |                  |                  | <= 2                           |           |
 | S6       | Frame > 50 ms per 10 dtk                      |                  |                  | <= 2                           |           |
 
@@ -82,9 +87,13 @@ dan penyimpangan apa pun dari protokol di TUGAS.md bagian 7.
   - *Interaction Capability (Operability):* Tombol tidak memberikan indikasi bahwa aksi telah diterima; pengguna kesulitan mengendalikan keranjang.
   - *Interaction Capability (User Error Protection):* Tidak ada pencegahan klik ganda; pengguna dapat secara tidak sengaja menambahkan produk berkali-kali.
   - *Interaction Capability (Self-descriptiveness):* Antarmuka gagal mengomunikasikan status (sedang memproses vs. gagal vs. berhasil).
-- **Perbaikan:** (akan diisi setelah kode diperbaiki)
-- **Trade-off:** (akan diisi setelah kode diperbaiki)
-- **Hasil:** (akan diisi setelah pengukuran ulang)
+- **Perbaikan:** 
+  1. Memindahkan feedback visual (ubah teks tombol, perbarui lencana, tampilkan toast) ke **awal fungsi**, tepat setelah data keranjang disimpan ke localStorage.
+  2. Menambahkan guard klik ganda: jika tombol sedang berstatus "sudah" (ditambahkan), klik berikutnya diabaikan selama 1,5 detik.
+  3. Menjadwalkan operasi berat (baca riwayat, kirim SDK, simpan riwayat) via `setTimeout(0)` agar main thread yield ke event loop untuk merender.
+  4. Mengurangi payload SDK: hanya mengirim `entryBaru` (1 entri riwayat terbaru), bukan seluruh array riwayat 9.000 entri.
+- **Trade-off:** Pengiriman data analitik menjadi *fire-and-forget* asinkron, sehingga ada risiko minimal data tidak terkirim jika tab ditutup sangat cepat. Namun SDK sudah memiliki antrian internal. Guard klik ganda mencegah penambahan cepat berturut-turut, yang bisa sedikit mengganggu power user yang memang ingin menambah banyak — namun ini justru melindungi mayoritas pengguna dari kesalahan.
+- **Hasil:** INP turun dari **104 ms menjadi 52 ms** (target ≤ 200 ms tercapai). Feedback visual muncul instan. Klik ganda 3× cepat hanya menambahkan 1 item (bukan 3).
 
 ### T-04: Voucher KILAT1212 Membekukan Seluruh Halaman karena Async Palsu pada Perhitungan Cicilan (TK-1057)
 
@@ -104,9 +113,12 @@ dan penyimpangan apa pun dari protokol di TUGAS.md bagian 7.
   - *Interaction Capability (Operability):* Pengguna tidak bisa scroll, mengetik, atau berinteraksi sama sekali selama proses berlangsung.
   - *Interaction Capability (Self-descriptiveness):* Progress bar seharusnya mengindikasikan kemajuan, namun gagal karena tidak pernah di-render secara bertahap.
   - *Interaction Capability (User Engagement):* Pengguna mengira aplikasi crash dan ingin meninggalkan halaman.
-- **Perbaikan:** (akan diisi setelah kode diperbaiki)
-- **Trade-off:** (akan diisi setelah kode diperbaiki)
-- **Hasil:** (akan diisi setelah pengukuran ulang)
+- **Perbaikan:**
+  1. Menghapus 40 iterasi `simulasiCicilan` yang sia-sia (hasilnya tidak pernah dipakai, hanya membuang CPU).
+  2. Mengubah `hitungHargaPromo` dari `async` palsu menjadi fungsi sinkron biasa (menghilangkan kebingungan soal microtask).
+  3. Memecah loop `terapkanVoucher` menjadi chunk 50 produk, diselingi `await new Promise(r => setTimeout(r, 0))` (yield ke main thread via macrotask) agar browser mendapat rendering opportunity di antara setiap chunk.
+- **Trade-off:** Total durasi proses voucher sedikit bertambah (~beberapa puluh ms) karena overhead penjadwalan macrotask per chunk. Namun UX jauh lebih baik: pengguna melihat progress bar bergerak dan bisa tetap berinteraksi.
+- **Hasil:** Long task turun dari **70 menjadi 4**, terlama turun dari **1.774 ms menjadi 769 ms**, total blokir turun dari **4.120 ms menjadi 1.217 ms** (~70% perbaikan). Progress bar bergerak bertahap dan kolom pencarian tetap responsif. Namun **INP masih 1.344 ms** karena bottleneck berpindah ke `renderProduk` (rebuild DOM seluruh kartu) di akhir proses — perbaikan lanjutan diperlukan (lihat bagian 6).
 
 ## 5. Dugaan yang ternyata keliru
 

@@ -114,12 +114,16 @@ bagian "sebelum" setelah hasilnya diketahui; bila prediksi meleset, jelaskan di 
 
 ### Sesudah perbaikan
 
-- **Hash commit perbaikan:** (diisi setelah commit kode perbaikan)
+- **Hash commit perbaikan:** e4aa6df
 - **Hasil ukur (median 3 kali):**
-  - INP pada S2: (diisi setelah pengukuran ulang)
-  - Long task terlama saat klik "+ Keranjang": (diisi setelah pengukuran ulang)
-- **Prediksi vs kenyataan:** (diisi setelah pengukuran ulang)
-- **Efek samping yang muncul:** (diisi setelah pengukuran ulang)
+  - INP pada S2: **52 ms** (turun dari 104 ms, target ≤ 200 ms tercapai).
+  - Long task terlama saat klik "+ Keranjang": **166 ms** pada skenario klik ganda (turun dari 1.122 ms). Long task ini berasal dari operasi riwayat + SDK yang dijadwalkan via setTimeout, bukan dari jalur kritis interaksi.
+  - Feedback visual (tombol berubah jadi "Ditambahkan ✓", lencana keranjang bertambah, toast muncul): **instan**, muncul di frame pertama setelah klik.
+  - Pencegahan klik ganda: **berhasil** — 3 klik cepat berturut-turut hanya menambahkan 1 item ke keranjang.
+- **Prediksi vs kenyataan:**
+  Prediksi INP ≤ 50 ms, kenyataan **52 ms** — sangat mendekati prediksi. Feedback visual instan sesuai prediksi. Guard klik ganda berhasil mencegah penambahan berulang sesuai prediksi. Satu hal yang sedikit meleset: masih ada long task 166 ms dari operasi riwayat yang dijadwalkan asinkron (localStorage + SDK hashing), namun ini tidak mempengaruhi respons interaksi karena terjadi setelah paint.
+- **Efek samping yang muncul:**
+  Tidak ada efek samping negatif. Semua event analitik (`add_to_cart`) tetap terkirim dengan informasi yang masuk akal (hanya payload yang diperkecil). Riwayat aktivitas tetap tersimpan lengkap di localStorage.
 
 ---
 
@@ -156,11 +160,15 @@ bagian "sebelum" setelah hasilnya diketahui; bila prediksi meleset, jelaskan di 
 
 ### Sesudah perbaikan
 
-- **Hash commit perbaikan:** (diisi setelah commit kode perbaikan)
+- **Hash commit perbaikan:** e4aa6df
 - **Hasil ukur (median 3 kali):**
-  - INP pada S4: (diisi setelah pengukuran ulang)
-  - Long task terlama saat proses voucher: (diisi setelah pengukuran ulang)
-  - Apakah progress bar tergambar bertahap: (diisi setelah pengukuran ulang)
-  - Apakah kolom cari tetap responsif: (diisi setelah pengukuran ulang)
-- **Prediksi vs kenyataan:** (diisi setelah pengukuran ulang)
-- **Efek samping yang muncul:** (diisi setelah pengukuran ulang)
+  - INP pada S4: **1.344 ms** (turun dari 1.784 ms, target ≤ 200 ms **belum tercapai**).
+  - Long task: **4 kali** (turun drastis dari 70), terlama **769 ms** (turun dari 1.774 ms).
+  - Total blokir: **1.217 ms** (turun dari 4.120 ms).
+  - Apakah progress bar tergambar bertahap: **Ya** — progress bar terlihat bergerak, harga voucher terpasang di kartu produk ("Pakai voucher: Rp 48.928").
+  - Apakah kolom cari tetap responsif: **Ya** — pengguna berhasil mengetik "sepatu" dan hasil pencarian (106 produk) langsung tampil selama proses voucher masih berjalan.
+- **Prediksi vs kenyataan:**
+  Prediksi INP ≤ 200 ms **meleset** — kenyataan 1.344 ms. Penyebab utama: `perbaruiHargaVoucherDiKartu()` di akhir proses voucher memanggil `renderProduk(keadaan.ditampilkan)` yang membangun ulang seluruh DOM kartu produk sekaligus. Operasi render DOM massal ini sendiri menjadi satu long task besar yang belum di-chunk. Selain itu, pencarian yang dijalankan bersamaan (mengetik "sepatu") juga memicu re-render tambahan. Perbaikan chunking pada loop perhitungan berhasil (long task turun dari 70 → 4, blokir turun 70%), tapi bottleneck berpindah ke tahap rendering akhir.
+  Prediksi yang **tepat**: progress bar bergerak bertahap (terbukti), kolom cari tetap responsif (terbukti bisa mengetik "sepatu"), dan penghapusan 40× simulasi sia-sia berhasil mengurangi beban CPU.
+- **Efek samping yang muncul:**
+  Tidak ada regresi fungsional. Voucher tetap terpasang dengan benar di semua produk yang memenuhi syarat. Sisa masalah INP tinggi bukan dari perhitungan voucher itu sendiri, melainkan dari proses re-render DOM di akhir yang perlu perbaikan lanjutan (misalnya virtual scrolling atau incremental DOM update).
