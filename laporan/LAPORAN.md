@@ -32,6 +32,72 @@ dan penyimpangan apa pun dari protokol di TUGAS.md bagian 7.
 | S5       | Frame > 50 ms per 10 dtk                      |                  |                  | <= 2                           |           |
 | S6       | Frame > 50 ms per 10 dtk                      |                  |                  | <= 2                           |           |
 
+### Bukti Data Mentah Alat Ukur TokoKilat (Skenario S1: Pengetikan "sepatu")
+
+```json
+{
+  "waktu": "2026-10-01T12:04:19.467Z",
+  "jumlahLongTask": 0,
+  "longTaskTerlama": 0,
+  "totalBlokir": 0,
+  "jumlahInteraksi": 7,
+  "inp": 192,
+  "inpRinci": {
+    "durasi": 192,
+    "jenis": "pointerdown",
+    "target": "#kolom-cari",
+    "tundaInput": 0,
+    "proses": 1,
+    "presentasi": 191
+  },
+  "limaInteraksiTerlambat": [
+    {
+      "durasi": 192,
+      "jenis": "pointerdown",
+      "target": "#kolom-cari",
+      "tundaInput": 0,
+      "proses": 1,
+      "presentasi": 191
+    },
+    {
+      "durasi": 168,
+      "jenis": "keydown",
+      "target": "#kolom-cari",
+      "tundaInput": 0,
+      "proses": 1,
+      "presentasi": 167
+    },
+    {
+      "durasi": 168,
+      "jenis": "keydown",
+      "target": "#kolom-cari",
+      "tundaInput": 0,
+      "proses": 0,
+      "presentasi": 168
+    },
+    {
+      "durasi": 160,
+      "jenis": "keydown",
+      "target": "#kolom-cari",
+      "tundaInput": 0,
+      "proses": 0,
+      "presentasi": 160
+    },
+    {
+      "durasi": 128,
+      "jenis": "keyup",
+      "target": "#kolom-cari",
+      "tundaInput": 0,
+      "proses": 1,
+      "presentasi": 127
+    }
+  ],
+  "cls": 0,
+  "frameLambat": 0,
+  "frameTerburuk": 0
+}
+```
+
 ## 4. Temuan
 
 ### T-01: Pemuatan Serentak 3.000 Gambar Produk Membebani Soket Jaringan dan Memori Browser
