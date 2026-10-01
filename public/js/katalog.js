@@ -2,7 +2,7 @@
 
 import { $, el, formatRupiah, formatRibuan, hargaSetelahDiskon } from './util.js';
 import { tambahKeKeranjang, beliSekarang } from './keranjang.js';
-import { periksaGulir } from './gulir.js';
+import { observasiKartu } from './gulir.js';
 
 export const keadaan = {
   semuaProduk: [],
@@ -87,12 +87,13 @@ export function renderProduk(daftar) {
   }
 
   for (let i = 0; i < daftar.length; i++) {
-    kisi.append(buatKartu(daftar[i], i));
+    const kartu = buatKartu(daftar[i], i);
+    kisi.append(kartu);
+    observasiKartu(kartu); // Daftarkan ke IntersectionObserver untuk animasi masuk + impresi
   }
 
   samakanTinggiJudul();
   $('#ringkasan').textContent = daftar.length.toLocaleString('id-ID') + ' produk ditampilkan';
-  requestAnimationFrame(() => periksaGulir());
 }
 
 export function perbaruiHargaVoucherDiKartu() {

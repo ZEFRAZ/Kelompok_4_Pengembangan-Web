@@ -14,32 +14,52 @@ const duaDigit = (n) => String(n).padStart(2, '0');
 function pasangHitungMundur() {
   const akhir = akhirFlashSale();
   const awal = Date.now();
-  const wadah = $('#hitung-mundur');
   const garis = $('#hm-garis');
   const jam = $('#hm-jam'), menit = $('#hm-menit'), detik = $('#hm-detik'), senti = $('#hm-senti');
+  const totalDurasi = akhir - awal + 1;
 
-  // 10 ms supaya angka perseratus detik terlihat mulus
-  setInterval(() => {
+  // requestAnimationFrame (~60 fps) sudah cukup mulus untuk mata manusia.
+  // Menggantikan setInterval(10ms) yang memicu ~100 callback/detik + forced reflow.
+  function perbarui() {
     const sisa = Math.max(akhir - Date.now(), 0);
     jam.textContent = duaDigit(Math.floor(sisa / 3600000));
     menit.textContent = duaDigit(Math.floor((sisa % 3600000) / 60000));
     detik.textContent = duaDigit(Math.floor((sisa % 60000) / 1000));
     senti.textContent = duaDigit(Math.floor((sisa % 1000) / 10));
 
-    // garis di bawah angka menyusut mengikuti sisa waktu
-    const lebarPenuh = wadah.offsetWidth;
-    garis.style.width = Math.round(lebarPenuh * (sisa / (akhir - awal + 1))) + 'px';
-  }, 10);
+    // Gunakan persentase agar tidak perlu membaca offsetWidth (forced reflow)
+    garis.style.width = ((sisa / totalDurasi) * 100) + '%';
+
+    if (sisa > 0) requestAnimationFrame(perbarui);
+  }
+  requestAnimationFrame(perbarui);
 }
 
 function pasangTeksBerjalan() {
   const teks = $('#berjalan-teks');
-  let x = teks.parentElement.offsetWidth;
-  setInterval(() => {
-    x -= 1;
-    if (x < -teks.offsetWidth) x = teks.parentElement.offsetWidth;
-    teks.style.left = x + 'px';
-  }, 10);
+  // Cache dimensi sekali saja, bukan baca setiap 10ms (forced reflow)
+  let lebarInduk = teks.parentElement.offsetWidth;
+  let lebarTeks = teks.offsetWidth;
+  let x = lebarInduk;
+
+  // Perbarui cache saat resize
+  window.addEventListener('resize', () => {
+    lebarInduk = teks.parentElement.offsetWidth;
+    lebarTeks = teks.offsetWidth;
+  });
+
+  // Gunakan CSS transform (compositor-friendly) via requestAnimationFrame
+  let waktuSebelumnya = 0;
+  function geser(timestamp) {
+    // Geser ~1px per ~10ms = ~6px per frame @60fps
+    const delta = waktuSebelumnya ? (timestamp - waktuSebelumnya) : 16;
+    waktuSebelumnya = timestamp;
+    x -= delta * 0.1; // kecepatan: 0.1 px/ms = ~6 px/frame
+    if (x < -lebarTeks) x = lebarInduk;
+    teks.style.transform = 'translateX(' + Math.round(x) + 'px)';
+    requestAnimationFrame(geser);
+  }
+  requestAnimationFrame(geser);
 }
 
 async function pasangBannerPromo() {
