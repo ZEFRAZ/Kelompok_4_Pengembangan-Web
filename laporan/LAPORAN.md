@@ -24,8 +24,8 @@ dan penyimpangan apa pun dari protokol di TUGAS.md bagian 7.
 | -------- | --------------------------------------------- | ---------------- | ---------------- | ------------------------------ | --------- |
 | S0       | CLS                                           | 0,02             | 0,00             | <= 0,1                         | Ya        |
 | S0       | Jumlah permintaan gambar dalam 10 dtk pertama | ~3.000           | 12               | sebanding dengan yang terlihat | Ya        |
-| S1       | INP                                           | ~580 ms          | ~45 ms           | <= 200 ms                      | Ya        |
-| S1       | Long task terlama                             | ~320 ms          | 0 ms             | <= 100 ms                      | Ya        |
+| S1       | INP                                           | 688 ms           | ~45 ms           | <= 200 ms                      | Ya        |
+| S1       | Long task terlama                             | 829 ms           | 0 ms             | <= 100 ms                      | Ya        |
 | S2       | INP                                           |                  |                  | <= 200 ms                      |           |
 | S3       | Jumlah pesanan dari 3 klik                    |                  |                  | 1                              |           |
 | S4       | INP / progres tergambar bertahap?             |                  |                  |                                |           |

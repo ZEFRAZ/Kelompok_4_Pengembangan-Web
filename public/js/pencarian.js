@@ -15,9 +15,16 @@ function normalkan(teks) {
     .trim();
 }
 
-function cocok(produk, kunci) {
-  const teks = normalkan(produk.nama + ' ' + produk.merek + ' ' + produk.kategori + ' ' + produk.kota);
-  return kunci.split(' ').every((k) => teks.includes(k));
+function ambilTeksCari(produk) {
+  if (!produk._teksCari) {
+    produk._teksCari = normalkan(produk.nama + ' ' + produk.merek + ' ' + produk.kategori + ' ' + produk.kota);
+  }
+  return produk._teksCari;
+}
+
+function cocok(produk, bagianKunci) {
+  const teks = ambilTeksCari(produk);
+  return bagianKunci.every((k) => teks.includes(k));
 }
 
 const PEMBANDING = {
@@ -29,9 +36,10 @@ const PEMBANDING = {
 
 export function terapkanSaringan() {
   const kunci = normalkan(saringan.kata);
+  const bagianKunci = kunci ? kunci.split(' ').filter(Boolean) : [];
   let hasil = keadaan.semuaProduk.filter((p) => {
     if (saringan.kategori !== 'Semua' && p.kategori !== saringan.kategori) return false;
-    if (kunci && !cocok(p, kunci)) return false;
+    if (bagianKunci.length && !cocok(p, bagianKunci)) return false;
     return true;
   });
   if (PEMBANDING[saringan.urut]) hasil = hasil.slice().sort(PEMBANDING[saringan.urut]);

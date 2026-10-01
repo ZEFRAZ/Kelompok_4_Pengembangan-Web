@@ -92,7 +92,7 @@ export function renderProduk(daftar) {
 
   samakanTinggiJudul();
   $('#ringkasan').textContent = daftar.length.toLocaleString('id-ID') + ' produk ditampilkan';
-  periksaGulir();
+  requestAnimationFrame(() => periksaGulir());
 }
 
 export function perbaruiHargaVoucherDiKartu() {
