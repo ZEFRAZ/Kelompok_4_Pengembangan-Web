@@ -1,6 +1,6 @@
 // Pencarian, saringan kategori, dan pengurutan.
 
-import { $, el, hargaSetelahDiskon } from './util.js';
+import { $, el, hargaSetelahDiskon, debounce } from './util.js';
 import { keadaan, renderProduk } from './katalog.js';
 
 const saringan = { kata: '', kategori: 'Semua', urut: 'relevan' };
@@ -15,9 +15,16 @@ function normalkan(teks) {
     .trim();
 }
 
-function cocok(produk, kunci) {
-  const teks = normalkan(produk.nama + ' ' + produk.merek + ' ' + produk.kategori + ' ' + produk.kota);
-  return kunci.split(' ').every((k) => teks.includes(k));
+function ambilTeksCari(produk) {
+  if (!produk._teksCari) {
+    produk._teksCari = normalkan(produk.nama + ' ' + produk.merek + ' ' + produk.kategori + ' ' + produk.kota);
+  }
+  return produk._teksCari;
+}
+
+function cocok(produk, bagianKunci) {
+  const teks = ambilTeksCari(produk);
+  return bagianKunci.every((k) => teks.includes(k));
 }
 
 const PEMBANDING = {
@@ -29,22 +36,31 @@ const PEMBANDING = {
 
 export function terapkanSaringan() {
   const kunci = normalkan(saringan.kata);
+  const bagianKunci = kunci ? kunci.split(' ').filter(Boolean) : [];
   let hasil = keadaan.semuaProduk.filter((p) => {
     if (saringan.kategori !== 'Semua' && p.kategori !== saringan.kategori) return false;
-    if (kunci && !cocok(p, kunci)) return false;
+    if (bagianKunci.length && !cocok(p, bagianKunci)) return false;
     return true;
   });
   if (PEMBANDING[saringan.urut]) hasil = hasil.slice().sort(PEMBANDING[saringan.urut]);
   renderProduk(hasil);
 
-  if (window.Lacak && kunci) window.Lacak.kirim('search', { kata: saringan.kata, jumlah: hasil.length });
+  if (window.Lacak && kunci) {
+    const kirimLacak = () => window.Lacak.kirim('search', { kata: saringan.kata, jumlah: hasil.length });
+    if ('requestIdleCallback' in window) requestIdleCallback(kirimLacak);
+    else setTimeout(kirimLacak, 100);
+  }
 }
 
 export function pasangPencarian() {
   const kolom = $('#kolom-cari');
+  const terapkanSaringanDebounced = debounce(() => {
+    terapkanSaringan();
+  }, 200);
+
   kolom.addEventListener('input', () => {
     saringan.kata = kolom.value;
-    terapkanSaringan();
+    terapkanSaringanDebounced();
   });
 
   $('#pilih-urut').addEventListener('change', (e) => {

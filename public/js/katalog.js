@@ -16,7 +16,7 @@ export async function muatProduk() {
   return keadaan.semuaProduk;
 }
 
-function buatKartu(produk) {
+function buatKartu(produk, indeks = 0) {
   const kartu = el('article', 'kartu');
   kartu.dataset.id = produk.id;
 
@@ -27,6 +27,15 @@ function buatKartu(produk) {
   const gambar = document.createElement('img');
   gambar.src = produk.gambar;
   gambar.alt = produk.nama;
+  gambar.width = 480;
+  gambar.height = 480;
+  gambar.decoding = 'async';
+  if (indeks < 6) {
+    gambar.loading = 'eager';
+    gambar.setAttribute('fetchpriority', 'high');
+  } else {
+    gambar.loading = 'lazy';
+  }
   media.append(gambar);
 
   const badan = el('div', 'kartu-badan');
@@ -59,22 +68,11 @@ function buatKartu(produk) {
   return kartu;
 }
 
-// Judul produk panjangnya beda-beda (1-3 baris). Supaya harga & tombol dalam
-// satu deret sejajar rapi, tinggi judul disamakan mengikuti judul tertinggi.
-// Mengukur semua judul terlalu lambat, jadi cukup ukur sebagian sebagai contoh.
-const JUMLAH_CONTOH = 24;
-
+// Tinggi judul diseragamkan secara deklaratif lewat CSS (.kartu-judul dengan
+// -webkit-line-clamp: 2 dan min-height tetap) untuk meniadakan Forced Synchronous
+// Layout / Layout Thrashing yang memblokir main thread saat pencarian & rendering.
 function samakanTinggiJudul() {
-  const judul = document.querySelectorAll('.kartu-judul');
-  let tertinggi = 0;
-  for (let i = 0; i < judul.length && i < JUMLAH_CONTOH; i++) {
-    const j = judul[i];
-    j.style.height = 'auto';
-    const tinggi = j.offsetHeight;
-    if (tinggi > tertinggi) tertinggi = tinggi;
-    j.style.height = tertinggi + 'px';
-  }
-  judul.forEach((j) => { j.style.height = tertinggi + 'px'; });
+  // Ditangani langsung oleh CSS (.kartu-judul di toko.css)
 }
 
 export function renderProduk(daftar) {
@@ -88,13 +86,13 @@ export function renderProduk(daftar) {
     kisi.append(kosong);
   }
 
-  for (const produk of daftar) {
-    kisi.append(buatKartu(produk));
+  for (let i = 0; i < daftar.length; i++) {
+    kisi.append(buatKartu(daftar[i], i));
   }
 
   samakanTinggiJudul();
   $('#ringkasan').textContent = daftar.length.toLocaleString('id-ID') + ' produk ditampilkan';
-  periksaGulir();
+  requestAnimationFrame(() => periksaGulir());
 }
 
 export function perbaruiHargaVoucherDiKartu() {
